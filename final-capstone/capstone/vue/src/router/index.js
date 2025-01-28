@@ -7,6 +7,7 @@ import LoginView from '../views/LoginView.vue';
 import LogoutView from '../views/LogoutView.vue';
 import RegisterView from '../views/RegisterView.vue';
 import PokemonDetailView from '../views/PokemonDetailView.vue';
+import TypesView from '../views/TypesView.vue';
 
 /**
  * The Vue Router is used to "direct" the browser to render a specific view component
@@ -17,6 +18,7 @@ import PokemonDetailView from '../views/PokemonDetailView.vue';
  * If they have (or don't need to) they're allowed to go about their way.
  */
 const routes = [
+
   {
     path: '/',
     name: 'home',
@@ -53,6 +55,14 @@ const routes = [
     path: "/pokemon/:id",
     name: "pokemon-detail",
     component: PokemonDetailView,
+    meta: {
+      requiresAuth: true
+    }
+  },
+  {
+    path: "/types",
+    name: "types",
+    component: TypesView,
     meta: {
       requiresAuth: true
     }
