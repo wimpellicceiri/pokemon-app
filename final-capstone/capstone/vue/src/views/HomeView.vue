@@ -1,51 +1,47 @@
 <template>
   <div class="content-box">
-    <h1>All Pokemon</h1>
+    <header v-if="typeId != null">
+      <pokemon-type-image :type-id="typeId" />
+      <h1>Pokemon</h1>
+    </header>
+    <header v-else>
+      <h1>All Pokemon</h1>
+    </header>
 
-    <section id="paging-section">
-      <div>
-        <button v-show="paging.offset > 0" @click="prevPage">Prev</button>
-        <button @click="nextPage">Next</button>
-      </div>
-
-      <div id="results-per-page">
-        Results per page:
-        <ul>
-          <li :class="{ 'selected': opt == paging.resultsPerPage.selectedOption }" 
-            v-for="opt in paging.resultsPerPage.options" :key="`results-per-page-opt-${opt}`"
-            @click="updateResultsPerPage(opt)">
-            {{ opt }}
-          </li>
-        </ul>
-      </div>
-    </section>
+    <paging-controls @paging-data-changed="pagingDataChanged" />
 
     <section id="pokemon-list">
-      <router-link :to="{ name: 'pokemon-detail', params: { id: pokemon.id } }" class="pokemon-card"
-        v-for="pokemon in pokemonArray" :key="pokemon.name">
-        <img :src="`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.id}.png`" />
-        {{ pokemon.name }}
-      </router-link>
+      <pokemon-card v-for="currPokemon in pokemonArrayFiltered" :key="currPokemon.name" :pokemon="currPokemon" />
     </section>
 
   </div>
 </template>
 
 <script>
+import PagingControls from '../components/PagingControls.vue';
 import pokeApiService from '../services/PokeApiService.js';
+import PokemonCard from '../components/PokemonCard.vue';
+import PokemonTypeImage from '../components/PokemonTypeImage.vue';
 
 export default {
+  components: {
+    PagingControls,
+    PokemonCard,
+    PokemonTypeImage
+  },
 
-  created() {
-    if (this.$route.query.resultsPerPage != null) {
-      this.paging.resultsPerPage.selectedOption = Number(this.$route.query.resultsPerPage);
+  computed: {
+    pokemonArrayFiltered() {
+      if (this.typeId != null) {
+        return this.pokemonArray.filter((item, index) => this.paging.offset <= index && index < this.paging.offset + this.paging.resultsPerPage.selectedOption);
+      } else {
+        return this.pokemonArray;
+      }
+    },
+
+    typeId() {
+      return this.$route.params.typeId;
     }
-
-    if (this.$route.query.offset != null) {
-      this.paging.offset = Number(this.$route.query.offset);
-    }
-
-    this.getMore();
   },
 
   data() {
@@ -56,7 +52,9 @@ export default {
         resultsPerPage: {
           options: [10, 20, 50],
           selectedOption: 20
-        }
+        },
+
+        totalCount: 0
       },
 
       pokemonArray: []
@@ -64,111 +62,57 @@ export default {
   },
 
   methods: {
+    pagingDataChanged(pagingData) {
+      this.paging = pagingData;
+      this.getMore();
+    },
+
     getMore() {
-      pokeApiService.getMore(this.paging.offset, this.paging.resultsPerPage.selectedOption)
-      .then(response => {
-        this.pokemonArray = response.data.results.map(result => {
-          const indexOfPokemon = result.url.lastIndexOf('pokemon/');
-          const indexOfLastSlash = result.url.lastIndexOf('/');
-          const id = result.url.substring(indexOfPokemon + 8, indexOfLastSlash);
-
-          return {
-            id: id,
-            name: result.name,
-          }
-        });
-      });
-    },
-
-    prevPage() {
-      this.paging.offset -= this.paging.resultsPerPage.selectedOption;
-
-      if (this.paging.offset < 0) {
-        this.paging.offset = 0;
+      if (this.typeId != null) {
+        pokeApiService.getTypeDetails(this.typeId)
+          .then(response => {
+            const pokemonForType = response.data.pokemon.map(obj => obj.pokemon);
+            this.pokemonArray = pokemonForType.map(this.mapPokemonObjFromApi);
+            this.paging.totalCount = this.pokemonArray.length;
+          });
+      } else {
+        pokeApiService.getMore(this.paging.offset, this.paging.resultsPerPage.selectedOption)
+          .then(response => {
+            this.pokemonArray = response.data.results.map(this.mapPokemonObjFromApi);
+            this.paging.totalCount = response.data.count;
+          });
       }
-
-      this.getMore();
-      this.updateUrl();
     },
 
-    nextPage() {
-      this.paging.offset += this.paging.resultsPerPage.selectedOption;
-      this.getMore();
-      this.updateUrl();
+    mapPokemonObjFromApi(result) {
+      const indexOfPokemon = result.url.lastIndexOf('pokemon/');
+      const indexOfLastSlash = result.url.lastIndexOf('/');
+      const id = result.url.substring(indexOfPokemon + 8, indexOfLastSlash);
+
+      return {
+        id: id,
+        name: result.name,
+      }
     },
-
-    updateResultsPerPage(val) {
-      this.paging.resultsPerPage.selectedOption = val;
-      this.getMore();
-      this.updateUrl();
-    },
-
-    updateUrl() {
-      const queryObj = { 
-        ...this.$route.query,
-        resultsPerPage: this.paging.resultsPerPage.selectedOption, 
-        offset: this.paging.offset 
-      };
-
-      this.$router.replace({ name: this.$route.name, query: queryObj });
-    }
   }
 
 };
 </script>
 
 <style scoped>
-#paging-section {
-  border-bottom: 1px solid var(--color-poke-blue);
-  padding-bottom: .25rem;
-  margin-bottom: 1rem;;
-
+header {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-#results-per-page {
-  display: flex;
-}
-#results-per-page ul {
-  display: flex;
-  flex-grow: 1;
   gap: 4px;
-}
-#results-per-page li {
-  border: 2px solid var(--color-poke-blue);
-  border-radius: 10px;
-  cursor: pointer;
-  list-style-type: none;
-  text-align: center;
-  width: 35px;
-}
-#results-per-page li.selected {
-  background-color: var(--color-poke-blue);
-  color: var(--color-poke-yellow);
-  cursor: default;
+  margin-bottom: 1.5rem;
 }
 
 #pokemon-list {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  max-height: 30vw;
+  max-height: 50vh;
   overflow-y: auto;
   scrollbar-color: var(--color-poke-yellow-80) var(--color-poke-blue);
   scrollbar-width: thin;
-}
-
-.pokemon-card {
-  border: 1px solid black;
-  border-radius: 8px;
-  padding: 10px;
-
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 4px;
 }
 </style>
